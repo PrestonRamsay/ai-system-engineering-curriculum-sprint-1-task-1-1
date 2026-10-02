@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Coldline Task 1.1 public answer contract. This schema validates structure, not engineering judgment.",
+  "title": "Coldline Task 1.1 answers",
+  "description": "Direct runtime observations submitted through the Task pull request.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["answers"],
+  "properties": {
+    "answers": {
+      "description": "The only top-level answer mapping accepted by the public verifier.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime_state",
+        "scenario_id",
+        "architecture_map",
+        "active_ports",
+        "api_trace_id",
+        "worker_trace_id",
+        "evidence_gap",
+        "fidelity_limitation"
+      ],
+      "properties": {
+        "runtime_state": {
+          "description": "Whether the student completed the supplied runtime workflow.",
+          "enum": ["ready", "blocked"]
+        },
+        "scenario_id": {
+          "description": "The identifier printed by the supplied scenario command.",
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 100
+        },
+        "architecture_map": {
+          "description": "The seven numbered running components identified from the Step 1 architecture map.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "component_1",
+            "component_2",
+            "component_3",
+            "component_4",
+            "component_5",
+            "component_6",
+            "component_7"
+          ],
+          "properties": {
+            "component_1": {"enum": ["api", "redis-streams", "worker", "postgresql", "jaeger", "prometheus", "grafana"]},
+            "component_2": {"enum": ["api", "redis-streams", "worker", "postgresql", "jaeger", "prometheus", "grafana"]},
+            "component_3": {"enum": ["api", "redis-streams", "worker", "postgresql", "jaeger", "prometheus", "grafana"]},
+            "component_4": {"enum": ["api", "redis-streams", "worker", "postgresql", "jaeger", "prometheus", "grafana"]},
+            "component_5": {"enum": ["api", "redis-streams", "worker", "postgresql", "jaeger", "prometheus", "grafana"]},
+            "component_6": {"enum": ["api", "redis-streams", "worker", "postgresql", "jaeger", "prometheus", "grafana"]},
+            "component_7": {"enum": ["api", "redis-streams", "worker", "postgresql", "jaeger", "prometheus", "grafana"]}
+          }
+        },
+        "active_ports": {
+          "description": "One to five active port interfaces observed in the supplied opening checkpoint.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["ModelProvider", "Retriever", "ObjectStore", "JobQueue", "SecretProvider"]
+          }
+        },
+        "api_trace_id": {
+          "description": "One 32-character API trace identifier copied from the local run.",
+          "type": "string",
+          "minLength": 32,
+          "maxLength": 32,
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "worker_trace_id": {
+          "description": "One 32-character worker trace identifier copied from the local run.",
+          "type": "string",
+          "minLength": 32,
+          "maxLength": 32,
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "evidence_gap": {
+          "description": "One bounded classification where the expected and observed connection states differ.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_component",
+            "target_component",
+            "connection_type",
+            "expected_behavior",
+            "observed_result"
+          ],
+          "properties": {
+            "source_component": {
+              "enum": ["api", "worker", "redis-streams", "postgresql", "model-provider", "opentelemetry", "jaeger", "prometheus", "grafana"]
+            },
+            "target_component": {
+              "enum": ["api", "worker", "redis-streams", "postgresql", "model-provider", "opentelemetry", "jaeger", "prometheus", "grafana"]
+            },
+            "connection_type": {
+              "enum": ["http-request", "database-write", "queue-publish", "queue-consume", "model-call", "trace-context", "telemetry-export", "metrics-scrape", "dashboard-query"]
+            },
+            "expected_behavior": {
+              "enum": ["same-trace", "separate-traces", "metrics-only", "not-observed"]
+            },
+            "observed_result": {
+              "enum": ["same-trace", "separate-traces", "metrics-only", "not-observed"]
+            }
+          }
+        },
+        "fidelity_limitation": {
+          "description": "The bounded local-runtime limitation category observed for the Task.",
+          "enum": ["local-compose-only", "deterministic-model-only", "no-production-scale"]
+        }
+      }
+    }
+  }
+}

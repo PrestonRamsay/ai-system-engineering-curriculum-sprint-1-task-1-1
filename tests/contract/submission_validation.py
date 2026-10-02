@@ -1,0 +1,282 @@
+"""Coldline.
+
+===================
+
+File:              tests/contract/submission_validation.py
+Component:         Contract tests — Submission Validation
+Purpose:           Validate Task 1.1 direct answers and advisory change paths.
+Interacts With:    Published interfaces and repository boundaries
+Sprint/Task:       Sprint 1 — Project 1
+Concepts:          Compatibility, ownership, export safety
+Tools:             Python 3.12, pytest
+"""
+
+import json
+import subprocess
+import sys
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+import yaml
+from jsonschema import Draft202012Validator
+
+ALLOWED_PATHS = frozenset({"submission.yaml", "docs/student/task-1-1-baseline.md"})
+BASELINE_MARKERS = frozenset({"_Write your evidence here._"})
+_JSON_YAML_TAGS = frozenset(
+    {
+        "tag:yaml.org,2002:map",
+        "tag:yaml.org,2002:seq",
+        "tag:yaml.org,2002:str",
+        "tag:yaml.org,2002:null",
+        "tag:yaml.org,2002:bool",
+        "tag:yaml.org,2002:int",
+        "tag:yaml.org,2002:float",
+    }
+)
+
+
+class _RestrictedYamlLoader(yaml.SafeLoader):  # type: ignore[misc]
+    """Load the Task's small YAML profile without YAML-only conveniences."""
+
+    def compose_node(self, parent: object, index: object) -> yaml.Node:
+        # A prior anchor is already rejected below, but deny aliases directly too.
+        if self.check_event(yaml.AliasEvent):
+            event = self.get_event()
+            raise yaml.composer.ComposerError(
+                None,
+                None,
+                "YAML aliases are not permitted",
+                event.start_mark,
+            )
+        event = self.peek_event()
+        if getattr(event, "anchor", None) is not None:
+            raise yaml.composer.ComposerError(
+                None,
+                None,
+                "YAML anchors are not permitted",
+                event.start_mark,
+            )
+        return super().compose_node(parent, index)
+
+    def construct_object(self, node: yaml.Node, deep: bool = False) -> object:
+        if node.tag not in _JSON_YAML_TAGS:
+            raise yaml.constructor.ConstructorError(
+                None,
+                None,
+                "non-JSON YAML tags are not permitted",
+                node.start_mark,
+            )
+        return super().construct_object(node, deep=deep)
+
+    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[str, object]:
+        mapping: dict[str, object] = {}
+        for key_node, value_node in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                raise yaml.constructor.ConstructorError(
+                    None,
+                    None,
+                    "YAML merge keys are not permitted",
+                    key_node.start_mark,
+                )
+            key = self.construct_object(key_node, deep=deep)
+            if not isinstance(key, str):
+                raise yaml.constructor.ConstructorError(
+                    None,
+                    None,
+                    "YAML mapping keys must be strings",
+                    key_node.start_mark,
+                )
+            if key in mapping:
+                raise yaml.constructor.ConstructorError(
+                    None,
+                    None,
+                    f"duplicate YAML key: {key}",
+                    key_node.start_mark,
+                )
+            mapping[key] = self.construct_object(value_node, deep=deep)
+        return mapping
+
+
+class SubmissionError(ValueError):
+    """Report one actionable public-verification failure."""
+
+
+def main(root: Path | None = None, *, changed_paths: list[str] | None = None) -> int:
+    """Validate the current answer sheet and protected-path boundary.
+
+    The optional arguments keep this entrypoint testable without changing the
+    process working directory or creating a temporary Git repository.
+    """
+    task_root = Path.cwd() if root is None else root
+    try:
+        validate_submission(
+            task_root / "submission.yaml",
+            task_root / "docs/contracts/submission.schema.json",
+            sample_path=task_root / "submission-sample.yaml",
+        )
+        validate_baseline(task_root / "docs/student/task-1-1-baseline.md")
+        validate_changed_paths(
+            _changed_paths(task_root) if changed_paths is None else changed_paths
+        )
+    except (SubmissionError, RuntimeError) as exc:
+        print(f"verification failed: {exc}", file=sys.stderr)
+        return 1
+    print("Task 1.1 answer verification passed.")
+    return 0
+
+
+def validate_submission(
+    submission_path: Path,
+    schema_path: Path,
+    *,
+    sample_path: Path | None = None,
+) -> None:
+    """Validate YAML shape, placeholders, schema, and sample-copy behavior."""
+    submission = _load_one_document(submission_path)
+    answers = submission.get("answers") if isinstance(submission, dict) else None
+    if not isinstance(answers, dict):
+        raise SubmissionError("answers must be one mapping")
+
+    active_ports = answers.get("active_ports")
+    if (
+        not isinstance(active_ports, list)
+        or not active_ports
+        or any(
+            not isinstance(port, str) or not port.strip() or port == "XXX" for port in active_ports
+        )
+    ):
+        raise SubmissionError("answers.active_ports is incomplete")
+    for field, value in answers.items():
+        if isinstance(value, str) and (not value.strip() or "Replace this line" in value):
+            raise SubmissionError(f"answers.{field} is incomplete")
+
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    errors = sorted(
+        Draft202012Validator(schema).iter_errors(submission), key=lambda error: list(error.path)
+    )
+    if errors:
+        error = errors[0]
+        location = ".".join(str(part) for part in error.absolute_path) or "submission"
+        raise SubmissionError(f"{location}: {error.message}")
+
+    if answers["api_trace_id"] == answers["worker_trace_id"]:
+        raise SubmissionError("answers.api_trace_id and answers.worker_trace_id must differ")
+
+    architecture_map = answers["architecture_map"]
+    if len(set(architecture_map.values())) != len(architecture_map):
+        raise SubmissionError(
+            "answers.architecture_map must name each permitted component exactly once"
+        )
+
+    evidence_gap = answers["evidence_gap"]
+    if evidence_gap["expected_behavior"] == evidence_gap["observed_result"]:
+        raise SubmissionError(
+            "answers.evidence_gap.expected_behavior and "
+            "answers.evidence_gap.observed_result must differ"
+        )
+
+    if sample_path is not None and submission == _load_one_document(sample_path):
+        raise SubmissionError("submission must not copy the fictional sample answers")
+
+
+def validate_baseline(baseline_path: Path) -> None:
+    """Reject the untouched evidence template without grading its prose."""
+    text = baseline_path.read_text(encoding="utf-8")
+    remaining = sorted(marker for marker in BASELINE_MARKERS if marker in text)
+    if remaining:
+        raise SubmissionError("task-1-1-baseline.md still contains template markers")
+
+
+def validate_changed_paths(paths: list[str]) -> None:
+    """Reject changed paths outside the two Task 1.1 student surfaces."""
+    normalized = {PurePosixPath(path.replace("\\", "/")).as_posix() for path in paths}
+    protected = sorted(normalized - ALLOWED_PATHS)
+    if protected:
+        raise SubmissionError(f"protected path changed: {', '.join(protected)}")
+
+
+def _changed_paths(root: Path) -> list[str]:
+    """Return changes since the commit this checkout branched from."""
+    try:
+        repository_root = Path(
+            subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        ).resolve()
+        if root.resolve() != repository_root:
+            # Compare changed paths only when this directory is the repository root.
+            return []
+        baseline = _baseline_commit(repository_root)
+        result = subprocess.run(
+            ["git", "diff", "--name-only", baseline],
+            cwd=repository_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError("Git history is unavailable for protected-path validation") from exc
+    return [line for line in result.stdout.splitlines() if line]
+
+
+def _baseline_commit(repository_root: Path) -> str:
+    """Return the commit a student's changes are measured against.
+
+    Student work happens ahead of `main` - on a branch, or as uncommitted
+    edits - and `main` itself keeps moving as this repository receives
+    updates after a student has already forked from it. The protected
+    boundary is therefore the commit a student actually started from
+    (their merge-base with `main`), not the repository's very first
+    commit, which a later update may have moved past.
+    """
+    for candidate in ("origin/main", "main"):
+        probe = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", candidate],
+            cwd=repository_root,
+            capture_output=True,
+            text=True,
+        )
+        if probe.returncode == 0:
+            merge_base = subprocess.run(
+                ["git", "merge-base", "HEAD", candidate],
+                cwd=repository_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return merge_base.stdout.strip()
+    # No `main` branch is reachable - fall back to the repository's single
+    # root commit.
+    roots = subprocess.run(
+        ["git", "rev-list", "--max-parents=0", "HEAD"],
+        cwd=repository_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    if len(roots) != 1:
+        raise RuntimeError("repository must have exactly one protected root commit")
+    return roots[0]
+
+
+def _load_one_document(path: Path) -> dict[str, Any]:
+    """Load exactly one plain JSON-compatible YAML mapping."""
+    try:
+        documents = list(
+            yaml.load_all(path.read_text(encoding="utf-8"), Loader=_RestrictedYamlLoader)
+        )
+    except yaml.YAMLError as exc:
+        raise SubmissionError(f"{path.name} must contain restricted YAML") from exc
+    except (OSError, UnicodeError) as exc:
+        raise SubmissionError(f"{path.name}: cannot read a UTF-8 answer sheet") from exc
+    if len(documents) != 1 or not isinstance(documents[0], dict):
+        raise SubmissionError(f"{path.name} must contain exactly one YAML mapping")
+    return documents[0]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
