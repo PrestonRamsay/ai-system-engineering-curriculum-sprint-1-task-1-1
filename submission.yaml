@@ -16,13 +16,13 @@ answers:
   # - ready: The required runtime workflow reached its ready state.
   # - blocked: A problem prevented completion of the required runtime workflow.
   # Choose one string from the runtime_state options above.
-  runtime_state: ""
+  runtime_state: "ready"
 
   # Task 1.1 — Step 3: Capturing baseline request traces
   # Identify your baseline run using the identifier printed by poe scenario.
   # Reference: the named Task lesson Step and docs/student/task-1-1-baseline.md.
   # Scenario identifier printed by `poe scenario`; 8-100 characters.
-  scenario_id: ""
+  scenario_id: "sprint1-baseline-exception"
 
   # Task 1.1 — Step 1: Compose stack and architecture orientation
   # Identify all seven numbered components in the lesson architecture map. Use every component
@@ -40,25 +40,25 @@ answers:
   architecture_map:
     # Name the component at diagram position 1.
     # Choose one string from the component options above.
-    component_1: ""
+    component_1: "api"
     # Name the component at diagram position 2.
     # Choose one string from the component options above.
-    component_2: ""
+    component_2: "redis-streams"
     # Name the component at diagram position 3.
     # Choose one string from the component options above.
-    component_3: ""
+    component_3: "worker"
     # Name the component at diagram position 4.
     # Choose one string from the component options above.
-    component_4: ""
+    component_4: "postgresql"
     # Name the component at diagram position 5.
     # Choose one string from the component options above.
-    component_5: ""
+    component_5: "jaeger"
     # Name the component at diagram position 6.
     # Choose one string from the component options above.
-    component_6: ""
+    component_6: "prometheus"
     # Name the component at diagram position 7.
     # Choose one string from the component options above.
-    component_7: ""
+    component_7: "grafana"
 
   # Task 1.1 — Step 2: The five application ports
   # List only the application port interfaces you observed as active in your running configuration.
@@ -74,20 +74,21 @@ answers:
   # YAML list: choose 1-5 unique values from the active_ports options above; order does not matter.
   # Replace every XXX placeholder; add or remove list items as needed.
   active_ports:
-    - "XXX"
-    - "XXX"
+    - "ModelProvider"
+    - "SecretProvider"
+    - "JobQueue"
 
   # Task 1.1 — Step 3: Capturing baseline request traces
   # Record the API-side trace identity from your own baseline run in Jaeger.
   # Reference: the named Task lesson Step and docs/student/task-1-1-baseline.md.
   # Step 3: Copy the API trace ID from Jaeger; use one lowercase 32-hex value.
-  api_trace_id: ""
+  api_trace_id: "d735103220ee32574589c4be30750bab"
 
   # Task 1.1 — Step 3: Capturing baseline request traces
   # Record the worker-side trace identity from your own baseline run in Jaeger.
   # Reference: the named Task lesson Step and docs/student/task-1-1-baseline.md.
   # Step 3: Copy the worker trace ID from Jaeger; use one lowercase 32-hex value.
-  worker_trace_id: ""
+  worker_trace_id: "d5c5149f5b5aecf5dadd6ae3604c3c39"
 
   # Task 1.1 — Step 3: Capturing baseline request traces
   # Classify one observed or missing connection using your baseline traces and telemetry. Choose
@@ -124,19 +125,19 @@ answers:
   evidence_gap:
     # Component at the start of the connection.
     # Choose one string from the source_component / target_component options above.
-    source_component: ""
+    source_component: "api"
     # Component at the receiving end of the connection.
     # Choose one string from the source_component / target_component options above.
-    target_component: ""
+    target_component: "worker"
     # Kind of interaction being examined.
     # Choose one string from the connection_type options above.
-    connection_type: ""
+    connection_type: "queue-publish"
     # Trace or metric relationship you expected to find.
     # Choose one string from the expected_behavior / observed_result options above.
-    expected_behavior: ""
+    expected_behavior: "same-trace"
     # Trace or metric relationship present in your evidence.
     # Choose one string from the expected_behavior / observed_result options above.
-    observed_result: ""
+    observed_result: "exception_id=exc-e6a7451a-fe1a-53ca-b280-9bf67f555977"
 
   # Task 1.1 — Step 3: Capturing baseline request traces
   # Select one limitation on what your local baseline observations establish.
@@ -148,4 +149,4 @@ answers:
   #   behavior.
   # no-production-scale: One local scenario does not prove production traffic or resilience.
   # Choose one string from the fidelity_limitation options above.
-  fidelity_limitation: ""
+  fidelity_limitation: "deterministic-model-only"
